@@ -129,9 +129,9 @@ if __name__=="__main__":
         elif ('Naya Raipur' or 'naya raipur') in query:
             webbrowser.open("www.iiitnr.ac.in") 
             time.sleep(2)
-            
+        # add song    
         elif ('play music') in query:
-            playsound("C:\\Users\\asus\\Music\\_Lyrics__Qaafirana_%5BWORMONO_Lofi_Remake%5D___Kedarnath___Bollywood_Lofi___Without_Dialogues(48k).mp3")
+            playsound("Add Song path")
             time.sleep(2)
         
         elif "using AI".lower() in query.lower():
