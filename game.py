@@ -1,228 +1,323 @@
-import time
-
+import copy
+import sys
 import pygame
-from pygame.locals import *
-
-# Constants
-SCREEN_WIDTH = 700
-SCREEN_HEIGHT = 700
-BRICK_WIDTH = 60
-BRICK_HEIGHT = 20
-PADDLE_WIDTH = 80
-PADDLE_HEIGHT = 12
-BALL_RADIUS = 10
-FPS = 60
-
-# Colors
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-YELLOW = (255, 255, 0)
-GREEN = (0, 255, 0)
-PINK = (255, 192, 203)
-LIGHT_PINK = (255, 192, 193)
-HOT_PINK = (255, 105, 180)
-DEEP_PINK = (255, 20, 147)
-LIGHT_CYAN = (224, 255, 255)
-DARK_CYAN = (0, 139, 139)
-LIGHT_CYAN = (224, 255, 255)
-AQUAMARINE = (127, 255, 212)
-DARK_BLUE = (0, 0, 139)
-MEDIUM_BLUE = (0, 0, 205)
-BLUE = (0, 0, 255)
-ROYAL_BLUE = (65, 105, 225)
-BEISH=(245,245,220)
+import random
+import numpy as np
 
 
-class Brick:
-    def __init__(self, x, y, points, color):
-        self.rect = pygame.Rect(x, y, BRICK_WIDTH, BRICK_HEIGHT)
-        self.alive = True
-        self.points = points
-        self.color = color
+WIDTH = 600
+HEIGHT = 600
 
-    def draw(self, surface):
-        pygame.draw.rect(surface, self.color, self.rect)
+ROWS = 3
+COLS = 3
+SQSIZE = WIDTH // COLS
 
-class Paddle:
+LINE_WIDTH = 15
+CIRC_WIDTH = 15
+CROSS_WIDTH = 20
+
+RADIUS = SQSIZE // 4
+
+OFFSET = 50
+
+
+BG_COLOR = (28, 170, 156)
+LINE_COLOR = (23, 145, 135)
+CIRC_COLOR = (239, 231, 200)
+CROSS_COLOR = (66, 66, 66)
+
+
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption('TIC TAC TOE:-A.I V/s player')
+screen.fill(BG_COLOR)
+
+
+# --- CLASSES ---
+
+class Board:
+
     def __init__(self):
-        self.rect = pygame.Rect(
-            SCREEN_WIDTH // 2 - PADDLE_WIDTH // 2,
-            SCREEN_HEIGHT  - PADDLE_HEIGHT - 10,
-            PADDLE_WIDTH,
-            PADDLE_HEIGHT,
-        )
-        self.speed = 50
+        self.squares = np.zeros((ROWS, COLS))
+        self.empty_sqrs = self.squares  # [squares]
+        self.marked_sqrs = 0
 
-    def move(self, direction):
-        if direction == "left":
-            self.rect.x -= self.speed
-        elif direction == "right":
-            self.rect.x += self.speed
+    def final_state(self, show=False):
+        '''
+            @return 0 if there is no win yet
+            @return 1 if player 1 wins
+            @return 2 if player 2 wins
+        '''
 
-        if self.rect.left < 0:
-            self.rect.left = 0
-        elif self.rect.right > SCREEN_WIDTH:
-            self.rect.right = SCREEN_WIDTH
+        # vertical wins
+        for col in range(COLS):
+            if self.squares[0][col] == self.squares[1][col] == self.squares[2][col] != 0:
+                if show:
+                    color = CIRC_COLOR if self.squares[0][col] == 2 else CROSS_COLOR
+                    iPos = (col * SQSIZE + SQSIZE // 2, 20)
+                    fPos = (col * SQSIZE + SQSIZE // 2, HEIGHT - 20)
+                    pygame.draw.line(screen, color, iPos, fPos, LINE_WIDTH)
+                return self.squares[0][col]
 
-    def draw(self, surface):
-        pygame.draw.rect(surface, RED, self.rect)
+        # horizontal wins
+        for row in range(ROWS):
+            if self.squares[row][0] == self.squares[row][1] == self.squares[row][2] != 0:
+                if show:
+                    color = CIRC_COLOR if self.squares[row][0] == 2 else CROSS_COLOR
+                    iPos = (20, row * SQSIZE + SQSIZE // 2)
+                    fPos = (WIDTH - 20, row * SQSIZE + SQSIZE // 2)
+                    pygame.draw.line(screen, color, iPos, fPos, LINE_WIDTH)
+                return self.squares[row][0]
 
-class Ball:
-    def __init__(self):
-        self.rect = pygame.Rect(SCREEN_WIDTH // 2 - BALL_RADIUS, SCREEN_HEIGHT // 2 - BALL_RADIUS, BALL_RADIUS * 2, BALL_RADIUS * 2)
-        self.velocity = [4, 4]
-        self.brick_sound = pygame.mixer.Sound("C:\\Users\\asus\\Downloads\\mixkit-funny-break-engine-2944.wav")  # Path to sound effect file
+        # desc diagonal
+        if self.squares[0][0] == self.squares[1][1] == self.squares[2][2] != 0:
+            if show:
+                color = CIRC_COLOR if self.squares[1][1] == 2 else CROSS_COLOR
+                iPos = (20, 20)
+                fPos = (WIDTH - 20, HEIGHT - 20)
+                pygame.draw.line(screen, color, iPos, fPos, CROSS_WIDTH)
+            return self.squares[1][1]
 
-    def update(self):
-        self.rect.x += self.velocity[0]
-        self.rect.y += self.velocity[1]
+        # asc diagonal
+        if self.squares[2][0] == self.squares[1][1] == self.squares[0][2] != 0:
+            if show:
+                color = CIRC_COLOR if self.squares[1][1] == 2 else CROSS_COLOR
+                iPos = (20, HEIGHT - 20)
+                fPos = (WIDTH - 20, 20)
+                pygame.draw.line(screen, color, iPos, fPos, CROSS_WIDTH)
+            return self.squares[1][1]
 
-        if self.rect.left <= 0 or self.rect.right >= SCREEN_WIDTH:
-            self.velocity[0] = -self.velocity[0]
+        # no win yet
+        return 0
 
-        if self.rect.top <= 0:
-            self.velocity[1] = -self.velocity[1]
+    def mark_sqr(self, row, col, player):
+        self.squares[row][col] = player
+        self.marked_sqrs += 1
 
-    def draw(self, surface):
-        pygame.draw.circle(surface, DEEP_PINK, self.rect.center, BALL_RADIUS)
+    def empty_sqr(self, row, col):
+        return self.squares[row][col] == 0
 
-    def play_brick_sound(self):
-        self.brick_sound.play()
+    def get_empty_sqrs(self):
+        empty_sqrs = []
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.empty_sqr(row, col):
+                    empty_sqrs.append((row, col))
 
-class Scoreboard:
-    def __init__(self):
-        self.score = 0
-        self.font = pygame.font.Font(None, 36)
-        self.box_rect = pygame.Rect(10, 10, 150, 50)  # Position and size of the scoreboard box
+        return empty_sqrs
 
-    def increase_score(self, points):
-        self.score += points
+    def isfull(self):
+        return self.marked_sqrs == 9
 
-    def decrease_score(self, points):
-        self.score -= points
+    def isempty(self):
+        return self.marked_sqrs == 0
 
-    def draw(self, surface):
-        pygame.draw.rect(surface, WHITE, self.box_rect, 2)  # Draw the scoreboard box
 
-        score_text = self.font.render("Score: " + str(self.score), True, WHITE)
-        text_rect = score_text.get_rect()
-        text_rect.center = self.box_rect.center  # Center the score text within the box
+class AI:
 
-        surface.blit(score_text, text_rect)
+    def __init__(self, level=1, player=2):
+        self.level = level
+        self.player = player
+
+    # --- RANDOM ---
+
+    def rnd(self, board):
+        empty_sqrs = board.get_empty_sqrs()
+        idx = random.randrange(0, len(empty_sqrs))
+
+        return empty_sqrs[idx]  # (row, col)
+
+    # --- MINIMAX ---
+
+    def minimax(self, board, maximizing):
+
+        # terminal case
+        case = board.final_state()
+
+        # player 1 wins
+        if case == 1:
+            return 1, None  # eval, move
+
+        # player 2 wins
+        if case == 2:
+            return -1, None
+
+        # draw
+        elif board.isfull():
+            return 0, None
+
+        if maximizing:
+            max_eval = -100
+            best_move = None
+            empty_sqrs = board.get_empty_sqrs()
+
+            for (row, col) in empty_sqrs:
+                temp_board = copy.deepcopy(board)
+                temp_board.mark_sqr(row, col, 1)
+                eval = self.minimax(temp_board, False)[0]
+                if eval > max_eval:
+                    max_eval = eval
+                    best_move = (row, col)
+
+            return max_eval, best_move
+
+        elif not maximizing:
+            min_eval = 100
+            best_move = None
+            empty_sqrs = board.get_empty_sqrs()
+
+            for (row, col) in empty_sqrs:
+                temp_board = copy.deepcopy(board)
+                temp_board.mark_sqr(row, col, self.player)
+                eval = self.minimax(temp_board, True)[0]
+                if eval < min_eval:
+                    min_eval = eval
+                    best_move = (row, col)
+
+            return min_eval, best_move
+
+    # --- MAIN EVAL ---
+
+    def eval(self, main_board):
+        if self.level == 0:
+            # random choice
+            eval = 'random'
+            move = self.rnd(main_board)
+        else:
+            # minimax algo choice
+            eval, move = self.minimax(main_board, False)
+
+        print(f'AI has chosen to mark the square in pos {move} with an eval of: {eval}')
+
+        return move  # row, col
+
 
 class Game:
+
     def __init__(self):
-        pygame.init()
-        self.clock = pygame.time.Clock()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Brick Break")
+        self.board = Board()
+        self.ai = AI()
+        self.player = 1  # 1-cross  #2-circles
+        self.gamemode = 'ai'  # pvp or ai
+        self.running = True
+        self.show_lines()
 
-        self.bricks = []
-        self.create_bricks()
+    # --- DRAW METHODS ---
 
-        self.paddle = Paddle()
-        self.ball = Ball()
-        self.scoreboard = Scoreboard()
+    def show_lines(self):
+        # bg
+        screen.fill(BG_COLOR)
 
-        self.game_over = False
+        # vertical
+        pygame.draw.line(screen, LINE_COLOR, (SQSIZE, 0), (SQSIZE, HEIGHT), LINE_WIDTH)
+        pygame.draw.line(screen, LINE_COLOR, (WIDTH - SQSIZE, 0), (WIDTH - SQSIZE, HEIGHT), LINE_WIDTH)
 
-    def create_bricks(self):
-        points = 1  # Starting points for the first brick
-        colors = [DARK_BLUE, MEDIUM_BLUE, BLUE, ROYAL_BLUE]  # Colors for different rows
-        for row in range(4):
-            for column in range(10):
-                x = column * (BRICK_WIDTH + 5) + 30
-                y = row * (BRICK_HEIGHT + 5) + 30
-                brick = Brick(x, y, points, colors[row])
-                self.bricks.append(brick)
-            points += 1  # Increase points for each subsequent row
+        # horizontal
+        pygame.draw.line(screen, LINE_COLOR, (0, SQSIZE), (WIDTH, SQSIZE), LINE_WIDTH)
+        pygame.draw.line(screen, LINE_COLOR, (0, HEIGHT - SQSIZE), (WIDTH, HEIGHT - SQSIZE), LINE_WIDTH)
 
+    def draw_fig(self, row, col):
+        if self.player == 1:
+            # draw cross
+            # desc line
+            start_desc = (col * SQSIZE + OFFSET, row * SQSIZE + OFFSET)
+            end_desc = (col * SQSIZE + SQSIZE - OFFSET, row * SQSIZE + SQSIZE - OFFSET)
+            pygame.draw.line(screen, CROSS_COLOR, start_desc, end_desc, CROSS_WIDTH)
+            # asc line
+            start_asc = (col * SQSIZE + OFFSET, row * SQSIZE + SQSIZE - OFFSET)
+            end_asc = (col * SQSIZE + SQSIZE - OFFSET, row * SQSIZE + OFFSET)
+            pygame.draw.line(screen, CROSS_COLOR, start_asc, end_asc, CROSS_WIDTH)
 
-        color=[GREEN,RED,BLACK]
-        for row in range(1):
-            pts=1
-            for column in range(10):
-                x = column * (BRICK_WIDTH + 5) + 30
-                y = SCREEN_HEIGHT -(row * (BRICK_HEIGHT + 5) + 30)
-                #y = SCREEN_HEIGHT - BRICK_HEIGHT - 30
-                brick = Brick(x, y, pts, color[row] )  # Negative points for the bottom bricks
-                self.bricks.append(brick)
-            pts += 1
-    def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                quit()
-            elif event.type == KEYDOWN:
-                if event.key == K_LEFT:
-                    self.paddle.move("left")
-                elif event.key == K_RIGHT:
-                    self.paddle.move("right")
+        elif self.player == 2:
+            # draw circle
+            center = (col * SQSIZE + SQSIZE // 2, row * SQSIZE + SQSIZE // 2)
+            pygame.draw.circle(screen, CIRC_COLOR, center, RADIUS, CIRC_WIDTH)
 
-    def update(self):
-        if self.game_over:
-            return
+    # --- OTHER METHODS ---
 
-        self.ball.update()
+    def make_move(self, row, col):
+        self.board.mark_sqr(row, col, self.player)
+        self.draw_fig(row, col)
+        self.next_turn()
 
-        if self.ball.rect.colliderect(self.paddle.rect):
-            self.ball.velocity[1] = -self.ball.velocity[1]
+    def next_turn(self):
+        self.player = self.player % 2 + 1
 
-        for brick in self.bricks:
-            if brick.alive and self.ball.rect.colliderect(brick.rect):
-                self.ball.velocity[1] = -self.ball.velocity[1]
-                brick.alive = False
-                if brick.points > 0:
-                    self.scoreboard.increase_score(brick.points)
-                else:
-                    self.scoreboard.decrease_score(abs(brick.points))
-                self.ball.play_brick_sound()
+    def change_gamemode(self):
+        self.gamemode = 'ai' if self.gamemode == 'pvp' else 'pvp'
 
-        if self.ball.rect.top >= SCREEN_HEIGHT:
-            self.end_game()
+    def isover(self):
+        return self.board.final_state(show=True) != 0 or self.board.isfull()
 
-    def draw(self):
-        self.screen.fill(BEISH)
-        self.paddle.draw(self.screen)
-        self.ball.draw(self.screen)
-
-        for brick in self.bricks:
-            if brick.alive:
-                brick.draw(self.screen)
-
-        self.scoreboard.draw(self.screen)
-
-        if self.game_over:
-            self.draw_game_over()
-
-        pygame.display.flip()
-
-    def draw_game_over(self):
-        font = pygame.font.Font(None, 48)
-        text = font.render("Game Over", True, BLACK)
-        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-        self.screen.blit(text, text_rect)
+    def reset(self):
+        self.__init__()
 
 
-
-
-    def end_game(self):
-        self.game_over = True
-
-
-    def run(self):
-        while True:
-            self.handle_events()
-            self.update()
-            self.draw()
-            self.clock.tick(FPS)
-
-            if self.game_over:
-                time.sleep(1)
-                pygame.quit()
-                break
-def game1():
+def play1():
+    # --- OBJECTS ---
     game = Game()
-    game.run()
+    board = game.board
+    ai = game.ai
+
+    # --- MAINLOOP ---
+
+    while True:
+
+        # pygame events
+        for event in pygame.event.get():
+
+            # quit event
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            # keydown event
+            if event.type == pygame.KEYDOWN:
+
+                # g-gamemode
+                if event.key == pygame.K_g:
+                    game.change_gamemode()
+
+                # r-restart
+                if event.key == pygame.K_r:
+                    game.reset()
+                    board = game.board
+                    ai = game.ai
+
+                # 0-random ai
+                if event.key == pygame.K_0:
+                    ai.level = 0
+
+                # 1-random ai
+                if event.key == pygame.K_1:
+                    ai.level = 1
+
+            # click event
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = event.pos
+                row = pos[1] // SQSIZE
+                col = pos[0] // SQSIZE
+
+                # human mark sqr
+                if board.empty_sqr(row, col) and game.running:
+                    game.make_move(row, col)
+
+                    if game.isover():
+                        game.running = False
+
+        # AI initial call
+        if game.gamemode == 'ai' and game.player == ai.player and game.running:
+
+            # update the screen
+            pygame.display.update()
+
+            # eval
+            row, col = ai.eval(board)
+            game.make_move(row, col)
+
+            if game.isover():
+                game.running = False
+
+        pygame.display.update()
+
+play1()
