@@ -38,7 +38,7 @@ def speak(audio):
  
  
 def ai(prompt,a):
-    openai.api_key = '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'
+    openai.api_key = ''  # add your api key
     text = f"OpenAI response for Prompt: {prompt} \n *************************\n\n"
 
     response = openai.Completion.create(
